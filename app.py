@@ -3,6 +3,8 @@ import os
 import tempfile
 import io
 import random
+import openai
+import re
 
 
 from langchain.document_loaders import PyPDFLoader
@@ -98,6 +100,13 @@ def get_quiz_data(text, openai_api_key):
         if "AuthenticationError" in str(e):
             st.error("Incorrect API key provided. Please check and update your API key.")
             st.stop()
+        elif 'context_length_exceeded' in str(e):
+            token_count = re.search(r'your messages resulted in (\d+) tokens', str(e)).group(1)
+            st.error(f"The uploaded file is too large with {token_count} tokens. "
+                     "This application uses GPT-3.5-turbo with a maximum token limit of 16,385. "
+                     f"Your file exceeds this limit by {int(token_count) - 16385} tokens. "
+                     "Please reduce the file size to within 16,385 tokens and try uploading again.")
+            st.stop()
         else:
             st.error(f"An error occurred: {str(e)}")
             st.stop()
@@ -142,6 +151,18 @@ def get_flash_data(text, openai_api_key):
         flashcards_data_clean = ast.literal_eval(flashcards_data)
         #st.code(flashcards_data_clean)  # Display the cleaned data
         return flashcards_data_clean
+    
+    except openai.BadRequestError as e:
+        if 'context_length_exceeded' in str(e):
+            token_count = re.search(r'resulted in (\d+) tokens', str(e)).group(1)
+            st.error(f"The uploaded file is too large with {token_count} tokens. "
+                     "This application uses GPT-3.5-turbo with a maximum token limit of 16,385. "
+                     f"Your file exceeds this limit by {int(token_count) - 16385} tokens. "
+                     "Please reduce the file size to within 16,385 tokens and try uploading again.")
+            st.stop()
+        else:
+            st.error(f"An error occurred: {str(e)}")
+            st.stop()
 
     except SyntaxError as se:
         st.error(f"A syntax error occurred when processing the data: {str(se)}")
@@ -163,17 +184,33 @@ def get_flash_data(text, openai_api_key):
 
 # Function to summarize text
 def summarize_text(text, OPENAI_API_KEY):
-    system_message_prompt = SystemMessagePromptTemplate.from_template("Summarize the following text:")
-    human_message_prompt = HumanMessagePromptTemplate.from_template("{text}")
-    chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
-    
-    chain = LLMChain(
-        llm=ChatOpenAI(model_name="gpt-3.5-turbo-1106", openai_api_key=OPENAI_API_KEY),
-        prompt=chat_prompt,
-    )
-    
-    summary = chain.run(text)
-    return summary
+    try:
+        system_message_prompt = SystemMessagePromptTemplate.from_template("Summarize the following text:")
+        human_message_prompt = HumanMessagePromptTemplate.from_template("{text}")
+        chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
+        
+        chain = LLMChain(
+            llm=ChatOpenAI(model_name="gpt-3.5-turbo-1106", openai_api_key=OPENAI_API_KEY),
+            prompt=chat_prompt,
+        )
+        
+        summary = chain.run(text)
+        return summary
+
+    except openai.BadRequestError as e:
+        if 'context_length_exceeded' in str(e):
+            token_count = re.search(r'your messages resulted in (\d+) tokens', str(e)).group(1)
+            st.error(f"The uploaded file is too large with {token_count} tokens. "
+                     "This application uses GPT-3.5-turbo with a maximum token limit of 16,385. "
+                     f"Your file exceeds this limit by {int(token_count) - 16385} tokens. "
+                     "Please reduce the file size to within 16,385 tokens and try uploading again.")
+            st.stop()
+        else:
+            st.error(f"An error occurred: {str(e)}")
+            st.stop()
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {str(e)}")
+        st.stop()
 
 # ---------------- Main page ----------------
 
@@ -401,3 +438,6 @@ with tab3:
             st.info("Please upload a PDF document and click 'Craft my content!' to proceed.")
         elif not OPENAI_API_KEY:
             st.error("Please fill out the OpenAI API Key to proceed. If you don't have one, you can obtain it [here](https://platform.openai.com/account/api-keys).")
+
+
+
